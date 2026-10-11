@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Liquor Demand Forecast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans p-8">
+
+<div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+    <!-- Form Container -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-900">Demand Prediction</h2>
+        <form id="prediction-form" action="/" method="post" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-1">Liquor Retail Price:</label>
+                <input type="number" step="0.01" name="price" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Volume Lag 1:</label>
+                <input type="number" step="0.01" name="lag1" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Volume Roll Mean 3:</label>
+                <input type="number" step="0.01" name="roll3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Week of Year:</label>
+                <input type="number" name="week" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            
+            <!-- Updated Button with Loading Spinner -->
+            <button type="submit" id="submit-btn" class="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg hover:bg-blue-700 transition duration-200 font-semibold flex items-center justify-center space-x-2 shadow-md">
+                <span id="btn-text">Predict Demand</span>
+                <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+        </form>
+
+        {% if prediction is defined %}
+        <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-900">
+            <h3 id="result-display" class="font-bold text-lg">Predicted Volume: {{ prediction }}</h3>
+        </div>
+        {% endif %}
+
+        <!-- Session History Section -->
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Session History</h3>
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-48 overflow-y-auto">
+                <table class="w-full text-left text-sm text-gray-600">
+                    <thead>
+                        <tr class="border-b border-gray-200">
+                            <th class="pb-2">Price</th>
+                            <th class="pb-2">Week</th>
+                            <th class="pb-2">Predicted Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <!-- Dynamic rows will appear here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Container -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-900">Analytics Dashboard</h2>
+        <img src="/static/images/dashboard.png" alt="Dashboard Analytics" class="w-full h-auto rounded-lg border border-gray-200">
+    </div>
+</div>
+
+<!-- JavaScript Integration -->
+<!-- JavaScript Integration -->
+<script>
+    const form = document.getElementById('prediction-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const btnText = document.getElementById('btn-text');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const historyTableBody = document.getElementById('history-table-body');
+
+    form.addEventListener('submit', () => {
+        btnText.textContent = 'Calculating...';
+        loadingSpinner.classList.add('hidden');
+        submitBtn.disabled = true;
+    });
+
+    const serverPrediction = "{{ prediction if prediction is defined else '' }}";
+    const serverPrice = "{{ price if price is defined else '' }}";
+    const serverWeek = "{{ week if week is defined else '' }}";
+
+    // Function to render history items into the table
+    function renderHistory(history) {
+        historyTableBody.innerHTML = '';
+        history.forEach(item => {
+            const row = document.createElement('tr');
+            row.classList.add('border-b', 'border-gray-100');
+            row.innerHTML = `
+                <td class="py-2">${item.price}</td>
+                <td class="py-2">${item.week}</td>
+                <td class="py-2 font-medium text-blue-600">${parseFloat(item.prediction).toFixed(2)}</td>
+            `;
+            historyTableBody.appendChild(row);
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        // Load existing history from localStorage
+        let history = JSON.parse(localStorage.getItem('prediction_history')) || [];
+
+        // If a new prediction was just submitted from the server, add it
+        if (serverPrediction !== '' && serverPrice !== '' && serverWeek !== '') {
+            // Avoid duplicate entry on simple page refreshes
+            const latestEntry = { price: serverPrice, week: serverWeek, prediction: serverPrediction };
+            const isDuplicate = history.length > 0 && 
+                history[0].price === latestEntry.price && 
+                history[0].week === latestEntry.week && 
+                history[0].prediction === latestEntry.prediction;
+
+            if (!isDuplicate) {
+                history.unshift(latestEntry); // Add to the beginning of the array
+                localStorage.setItem('prediction_history', JSON.stringify(history));
+            }
+        }
+
+        renderHistory(history);
+    });
+</script>
+
+</body>
+</html>
